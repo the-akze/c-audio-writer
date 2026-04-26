@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #define UINT_TYPE(b) uint##b##_t
 #define INT_TYPE(b) int##b##_t
@@ -66,28 +67,47 @@ float time_at_bloc_index(uint32_t i) {
     return (float) i / SAMPLE_RATE;
 }
 
-void make_audio(uint32_t num_blocs, UINT_TYPE(16) buffer_l[], UINT_TYPE(16) buffer_r[]) {
+void write_normalized_sample_to_buffer_index(INT_TYPE(16) *buffer_i, float sample) {
+    sample = sample > 1.0f ? 1.0f : (sample < -1.0f ? -1.0f : sample);
+    *buffer_i = sample * INT16_MAX;
+}
+
+void make_audio(uint32_t num_blocs, INT_TYPE(16) buffer_l[], INT_TYPE(16) buffer_r[]) {
     // do whatever you want with the buffer to write audio data
     for (uint32_t i = 0; i < num_blocs; i++) {
         float t = time_at_bloc_index(i);
-        const float freq = 440.0;
-        int16_t sample = waveform_function(SAWTOOTH, t * freq) * INT16_MAX;
-        buffer_l[i] = sample;
-        buffer_r[i] = sample;
+        float amplitude = 1.0f;
+        if (t < 0.5f) {
+            amplitude = t * 2;
+            amplitude = powf(amplitude, 3.0f);
+        } else if (t > 1 && t <= 2) {
+            amplitude = 1.0f;
+        } else if (t > 2) {
+            amplitude = (8.0f - t) / (8.0f - 2.0f);
+            amplitude = powf(amplitude, 4.0f);
+        }
+        float saw = amplitude * waveform_function(SAWTOOTH, t * 440.0);
+        float sine_wub_wub = amplitude * waveform_function(SINE, t * 110.0) * waveform_function(SINE, t * 2.0f);
+        float sine_sub = waveform_function(SINE, t * 40.0) * waveform_function(SINE, t * 0.5f);
+        
+        write_normalized_sample_to_buffer_index(&buffer_l[i], saw * 0.1f + sine_wub_wub * 0.5f + sine_sub * 0.4f);
+        write_normalized_sample_to_buffer_index(&buffer_r[i], saw * 0.2f + sine_wub_wub * 0.4f + sine_sub * 0.4f);
     }
 }
 
 int main(int argc, char *argv[]) {
     FILE *f;
 
-    // check if file already exists
-    f = fopen("created.wav", "rb");
-    if (f != NULL) {
-        // file exists, terminate
-        printf("file %s already exists, terminating\n", FILE_NAME);
-        return 1;
+    if (!(argc > 1 && strcmp(argv[1], "overwrite") == 0)) {
+        // check if file already exists
+        f = fopen(FILE_NAME, "rb");
+        if (f != NULL) {
+            // file exists, terminate
+            printf("file %s already exists, terminating\n", FILE_NAME);
+            return 1;
+        }
+        // done checking if file exists
     }
-    // done checking if file exists
 
     const uint32_t bytes_per_bloc = NUM_CHANNELS * SAMPLE_BITS / 8;
     const uint32_t bytes_per_second = SAMPLE_RATE * bytes_per_bloc;
@@ -125,8 +145,8 @@ int main(int argc, char *argv[]) {
     WRITE_STR_LITERAL(f, "data");
     fwrite32(f, total_bytes_sampled_data);
 
-    UINT_TYPE(16) buffer_l[num_blocs];
-    UINT_TYPE(16) buffer_r[num_blocs];
+    INT_TYPE(16) buffer_l[num_blocs];
+    INT_TYPE(16) buffer_r[num_blocs];
     make_audio(num_blocs, buffer_l, buffer_r);
 
     // once audio has been written to the buffer, write it to the file
