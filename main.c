@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define UINT_TYPE(b) uint##b##_t
@@ -145,8 +146,8 @@ int main(int argc, char *argv[]) {
     WRITE_STR_LITERAL(f, "data");
     fwrite32(f, total_bytes_sampled_data);
 
-    INT_TYPE(16) buffer_l[num_blocs];
-    INT_TYPE(16) buffer_r[num_blocs];
+    INT_TYPE(16)* buffer_l = (INT_TYPE(16)*)malloc(sizeof(INT_TYPE(16)) * num_blocs);
+    INT_TYPE(16)* buffer_r = (INT_TYPE(16)*)malloc(sizeof(INT_TYPE(16)) * num_blocs);
     make_audio(num_blocs, buffer_l, buffer_r);
 
     // once audio has been written to the buffer, write it to the file
